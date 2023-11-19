@@ -205,6 +205,11 @@ def __coordinator__(args):
             sleep(0.25)
     except KeyboardInterrupt:
         print("Terminating...")
+
+        with open(args.csv, "w", newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, **csvConfig)
+            for E in targets.values():
+                writer.writerow(asdict(E))
         m.shutdown()
 
 
