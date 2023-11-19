@@ -209,6 +209,7 @@ def __coordinator__(args):
         with open(args.csv, "w", newline='') as csvfile:
             writer = csv.DictWriter(csvfile, **csvConfig)
             for E in targets.values():
+                print(asdict(E))
                 writer.writerow(asdict(E))
         m.shutdown()
 
