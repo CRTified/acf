@@ -1,4 +1,5 @@
-from sage.all import *
+#!/bin/python3
+from datetime import datetime
 import argparse
 import os
 from pathlib import Path
@@ -7,6 +8,15 @@ from ctypes import c_bool
 from multiprocessing import Value, Process, cpu_count
 from multiprocessing.managers import SyncManager, DictProxy
 from dataclasses import dataclass, field, asdict
+
+try:
+    pari_mode = False
+    from sage.all import *
+except:
+    pari_mode = True
+    import cypari2
+    from math import log
+
 
 @dataclass(order=True)
 class EllipticCurveTask:
@@ -37,7 +47,7 @@ csvConfig = {"fieldnames": FIELDNAMES,
 def smoothness(factors):
     return max([pi**ei for pi, ei in factors])
 
-def sample_curve(q):
+def sample_curve_sage(q):
     FFq = GF(q)
     def mkCurve():
         # Reject singular curves
@@ -57,41 +67,75 @@ def sample_curve(q):
     del(E)
     return (int(a), int(b)), float(log(smoothness(factors), 2))
 
+def sample_curve_pari(q, pari):
+    def mkCurve():
+        # Reject singular curves
+        while 4 * (a := pari.random(q))**3 + \
+              27 * (b := pari.random(q))**2 \
+              == 0:
+            pass
+        return pari.ellinit([a, b], q)
+
+    # Reject Curves whose group structure splits
+    while len(pari.ellgenerators(E := mkCurve())) != 1:
+        pass
+
+    a, b = E[3], E[4]
+    order = pari.ellcard(E)
+    factors = list(zip(*pari.factor(order)))
+    return (int(a), int(b)), float(log(smoothness(factors), 2))
 
 class CurveManager(SyncManager): pass
 
 def __worker__(args):
+    TRY_SAMPLES = 100
     def work(targets, messages, pindex):
         def get_task():
             return max(targets.values())
 
+        pari = cypari2.Pari()
+        pari.allocatemem(20 * 1000000)
         try:
             while True:
                 task = get_task()
-                print(f"P{pindex}, Job: {task.name}, current best: {task.current_best}, Samples: {task.samples}")
+                print(f"P{pindex:03}, Job {task.name}: current best: {task.current_best}, Samples: {task.samples}")
 
                 if task.current_best < args.threshold:
                     print("Worst curve below threshold")
                     print("No work to be done, terminating...")
                     break
 
-                for i in range(50):
-                    (a, b), smoothness = sample_curve(task.q)
+                for i in range(TRY_SAMPLES):
+                    if pari_mode:
+                        (a, b), smoothness = sample_curve_pari(task.q, pari)
+                    else:
+                        (a, b), smoothness = sample_curve_sage(task.q)
+
+                    if smoothness >= task.current_best:
+                        # We know that we did not improve, so we don't need
+                        # to check the coordinator
+                        continue
+
                     if smoothness < targets[task.name].current_best:
-                        targets[task.name].current_best = smoothness
-                        targets[task.name].aux_a = a
-                        targets[task.name].aux_b = b
-                        targets[task.name].samples += (i + 1)
+                        task.current_best = smoothness
+                        task.aux_a = a
+                        task.aux_b = b
+                        task.samples += targets[task.name].samples + i + 1
 
                         # Communicate result
+                        targets[task.name] = task
                         messages["changed"] = True
 
-                        print(f"New best for {task.name}: smoothness of {smoothness}, with a={a}, b={b}")
+                        print(f"P{pindex:03}, Job {task.name}:     New best: {smoothness}, with a={a}, b={b}")
 
                         # Go to next curve
                         break
                 else:
-                    targets[task.name].samples += 50
+                    task = targets[task.name]
+                    task.samples += TRY_SAMPLES
+                    targets[task.name] = task
+                    messages["changed"] = True
+
 
         except KeyboardInterrupt:
             print("Terminating...")
@@ -153,8 +197,7 @@ def __coordinator__(args):
                     writer = csv.DictWriter(csvfile, **csvConfig)
                     for E in targets.values():
                         writer.writerow(asdict(E))
-
-
+                print(f"\r{datetime.now()}",  end="")
     except KeyboardInterrupt:
         print("Terminating...")
         m.shutdown()
@@ -177,13 +220,25 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--csv', type=Path, default=os.getenv("ACF_CSV", "curves.csv"),
                         help="CSV file (r/w) of target elliptic curves (Default: $ACF_CSV or curves.csv)")
 
-    parser.add_argument('-j', '--ncpu', type=int, default=os.getenv("ACF_NCPU", cpu_count()),
-                        help=f"Number of processes to run in parallel (Default: $ACF_NCPU or all CPUs (Detected: {cpu_count()}))")
+    parser.add_argument('-j', '--ncpu', type=int, default=os.getenv("ACF_NCPU", cpu_count() - 1),
+                        help=f"Number of processes to run in parallel (Default: $ACF_NCPU or all but one CPUs, detected: {cpu_count() - 1})")
 
-    parser.add_argument('-t', '--threshold', type=float, default=os.getenv("ACF_THRESHOLD", 20.0),
-                        help="Threshold for the order of the auxiliary curve in bits to consider finished")
+    parser.add_argument('-t', '--threshold', type=float, default=os.getenv("ACF_THRESHOLD", 30.0),
+                        help="Threshold for the order of the auxiliary curve in bits to consider finished (Default: 30.0)")
 
     args = parser.parse_args()
+
+
+
+    try:
+        pari = cypari2.Pari()
+        pari.ellmodulareqn(11)
+        print("SEA dataset available")
+        del(pari)
+    except:
+        print("No SEA dataset available")
+
+
     if args.coordinator:
         __coordinator__(args)
     else:
