@@ -2,6 +2,7 @@
 from datetime import datetime
 import argparse
 import os
+from time import sleep
 from pathlib import Path
 import csv
 from ctypes import c_bool
@@ -189,15 +190,19 @@ def __coordinator__(args):
     messages = m.get_messages()
 
     try:
+        last_write = datetime.now()
         while True:
-            if messages["changed"]:
+            if messages["changed"] and (datetime.now() - last_write).seconds >= 5:
                 messages["changed"] = False
 
                 with open(args.csv, "w", newline='') as csvfile:
                     writer = csv.DictWriter(csvfile, **csvConfig)
                     for E in targets.values():
                         writer.writerow(asdict(E))
-                print(f"\r{datetime.now()}",  end="")
+
+                last_write = datetime.now()
+                print(f"\rLast write: {last_write}",  end="")
+            sleep(0.25)
     except KeyboardInterrupt:
         print("Terminating...")
         m.shutdown()
