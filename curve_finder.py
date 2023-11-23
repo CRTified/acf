@@ -164,7 +164,12 @@ def __coordinator__(args):
     print(f"Reading {args.csv}")
 
     targets = {}
-    with open(args.csv, "r", newline="") as csvfile:
+
+    initialFile = \
+        args.csv \
+        if os.path.isfile(args.csv) else \
+        os.path.join("/basedata", os.path.basename(args.csv))
+    with open(initialFile, "r", newline="") as csvfile:
         reader = csv.DictReader(csvfile, **csvConfig)
         for csvE in reader:
             E = EllipticCurveTask(**csvE)

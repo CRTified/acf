@@ -15,14 +15,16 @@
               pari-seadata = prev.pari-seadata-small.overrideAttrs (old: {
                 pname = "pari-seadata";
                 src = prev.fetchzip {
-                  url = "https://pari.math.u-bordeaux.fr/pub/pari/packages/seadata.tgz";
+                  url =
+                    "https://pari.math.u-bordeaux.fr/pub/pari/packages/seadata.tgz";
                   hash = "sha256-WBxYkligfYCU01dLokThdEliMZBt/eehDn6v9AET8co=";
                 };
               });
               pari-seadata-big = prev.pari-seadata-small.overrideAttrs (old: {
                 pname = "pari-seadata-big";
                 src = prev.fetchzip {
-                  url = "https://pari.math.u-bordeaux.fr/pub/pari/packages/seadata-big.tar";
+                  url =
+                    "https://pari.math.u-bordeaux.fr/pub/pari/packages/seadata-big.tar";
                   hash = "sha256-fE2yYkgIpbvSugD4tkSkOfBQhTLv1oCiR2EP3VgipfI=";
                 };
               });
@@ -43,26 +45,38 @@
         curve_finder = pkgs.writeScriptBin "curve_finder.py"
           (builtins.readFile ./curve_finder.py);
 
+        basedata = pkgs.callPackage ({ stdenvNoCC }: stdenvNoCC.mkDerivation {
+          name = "acf-basedata";
+          dontUnpack = true;
+          src = ./basedata;
+          installPhase = ''
+            mkdir -p $out/basedata;
+            cp -R $src/* $out/basedata;
+          '';
+        }) {};
+
       in {
         packages = {
           inherit (pkgs) sage pari-seadata;
           inherit python3;
 
           oci-acf-py = pkgs.dockerTools.buildImage {
-            name = "acf-py";
+            name = "crtified/acf-py";
             tag = "latest";
-            copyToRoot = [ python3 pkgs.pari-seadata curve_finder ];
+            copyToRoot = pkgs.buildEnv {
+              name = "acf-py-root";
+              paths =
+                [ pkgs.bash pkgs.coreutils python3 pkgs.pari-seadata curve_finder basedata ];
+              pathsToLink = [ "/bin" "/basedata" ];
+            };
 
-            runAsRoot = ''
-              #!${pkgs.runtimeShell}
-              mkdir -p /data
-              mkdir -p /tmp
+            extraCommands = ''
+              mkdir -p data
+              mkdir -p tmp
             '';
 
             config = {
-              Env = [
-                "GP_DATA_DIR=${pkgs.pari-seadata}/share/pari"
-              ];
+              Env = [ "GP_DATA_DIR=${pkgs.pari-seadata}/share/pari" ];
               Cmd = [
                 "${python3}/bin/python3"
                 "${curve_finder}/bin/curve_finder.py"
@@ -75,7 +89,8 @@
           oci-acf-sage = pkgs.dockerTools.buildImage {
             name = "acf-sage";
             tag = "latest";
-            copyToRoot = [ pkgs.coreutils pkgs.gnused pkgs.sage curve_finder ];
+            copyToRoot =
+              [ pkgs.coreutils pkgs.gnused pkgs.sage curve_finder pkgs.bash ];
 
             runAsRoot = ''
               #!${pkgs.runtimeShell}
