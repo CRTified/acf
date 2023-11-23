@@ -95,7 +95,7 @@ def __worker__(args):
             return max(targets.values())
 
         pari = cypari2.Pari()
-        pari.allocatemem(20 * 1000000)
+        pari.allocatemem(args.memory * 1000000)
         try:
             while True:
                 task = get_task()
@@ -143,12 +143,15 @@ def __worker__(args):
 
     CurveManager.register('get_targets')
     CurveManager.register('get_messages')
+    print(f"Trying to connect to {args.host}:{args.port}...")
     m = CurveManager(address=(args.host, args.port), authkey=args.key)
     m.connect()
+    print("Connected")
 
     targets = m.get_targets()
     messages = m.get_messages()
 
+    print(f"Starting {args.cpu} processes")
     procs = []
     for i in range(args.ncpu):
         p = Process(target=work, args=(targets, messages, i))
@@ -241,6 +244,10 @@ if __name__ == "__main__":
 
     parser.add_argument('-t', '--threshold', type=float, default=os.getenv("ACF_THRESHOLD", 30.0),
                         help="Threshold for the order of the auxiliary curve in bits to consider finished (Default: 30.0)")
+
+
+    parser.add_argument('-m', '--memory', type=int, default=50,
+                        help="Memory (in MB) to allocate per CPU for PARI (Default: 50)")
 
     args = parser.parse_args()
 
