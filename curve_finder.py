@@ -99,7 +99,7 @@ def __worker__(args):
         try:
             while True:
                 task = get_task()
-                print(f"P{pindex:03}, Job {task.name}: current best: {task.current_best}, Samples: {task.samples}")
+                print(f"P{pindex:03}, Job {task.name}: current best: {task.current_best}, Samples: {task.samples}", flush=True)
 
                 if task.current_best < args.threshold:
                     print("Worst curve below threshold")
@@ -151,7 +151,7 @@ def __worker__(args):
     targets = m.get_targets()
     messages = m.get_messages()
 
-    print(f"Starting {args.cpu} processes")
+    print(f"Starting {args.ncpu} processes")
     procs = []
     for i in range(args.ncpu):
         p = Process(target=work, args=(targets, messages, i))
@@ -209,7 +209,7 @@ def __coordinator__(args):
                         writer.writerow(asdict(E))
 
                 last_write = datetime.now()
-                print(f"\rLast write: {last_write}",  end="")
+                print(f"\rLast write: {last_write}",  end="", flush=True)
             sleep(0.25)
     except KeyboardInterrupt:
         print("Terminating...")
