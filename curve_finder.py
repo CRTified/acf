@@ -10,6 +10,9 @@ from multiprocessing import Value, Process, cpu_count
 from multiprocessing.managers import SyncManager, DictProxy
 from dataclasses import dataclass, field, asdict
 
+import socketserver
+import threading
+
 try:
     pari_mode = False
     from sage.all import *
@@ -18,6 +21,15 @@ except:
     import cypari2
     from math import log
 
+
+
+class tcphandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.data = self.request.recv(1024)
+        self.request.send(self.data)
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    pass
 
 @dataclass(order=True)
 class EllipticCurveTask:
@@ -148,6 +160,8 @@ def __worker__(args):
     m.connect()
     print("Connected")
 
+
+
     targets = m.get_targets()
     messages = m.get_messages()
 
@@ -158,8 +172,17 @@ def __worker__(args):
         p.start()
         procs.append(p)
 
+    print("Starting health check port")
+
+    server = ThreadedTCPServer(("0.0.0.0", args.port + 1), tcphandler)
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon  = True
+    server_thread.start()
+
     for p in procs:
         p.join()
+
+    server.shutdown()
 
 
 
@@ -260,7 +283,6 @@ if __name__ == "__main__":
         del(pari)
     except:
         print("No SEA dataset available")
-
 
     if args.coordinator:
         __coordinator__(args)
