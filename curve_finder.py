@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, asdict
 
 import socketserver
 import threading
+import random
 
 try:
     pari_mode = False
@@ -106,8 +107,14 @@ def __worker__(args):
         def get_task():
             return max(targets.values())
 
-        pari = cypari2.Pari()
-        pari.allocatemem(args.memory * 1000000)
+        random.seed(os.urandom(32))
+        if pari_mode:
+            pari = cypari2.Pari()
+            pari.setrand(int.from_bytes(os.urandom(8)))
+            pari.allocatemem(args.memory * 1000000)
+        else:
+            set_random_seed()
+
         try:
             while True:
                 task = get_task()
@@ -269,8 +276,8 @@ if __name__ == "__main__":
                         help="Threshold for the order of the auxiliary curve in bits to consider finished (Default: 30.0)")
 
 
-    parser.add_argument('-m', '--memory', type=int, default=50,
-                        help="Memory (in MB) to allocate per CPU for PARI (Default: 50)")
+    parser.add_argument('-m', '--memory', type=int, default=200,
+                        help="Memory (in MB) to allocate per CPU for PARI (Default: 200)")
 
     args = parser.parse_args()
 
