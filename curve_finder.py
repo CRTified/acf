@@ -272,8 +272,8 @@ if __name__ == "__main__":
     parser.add_argument('-j', '--ncpu', type=int, default=os.getenv("ACF_NCPU", cpu_count() - 1),
                         help=f"Number of processes to run in parallel (Default: $ACF_NCPU or all but one CPUs, detected: {cpu_count() - 1})")
 
-    parser.add_argument('-t', '--threshold', type=float, default=os.getenv("ACF_THRESHOLD", 30.0),
-                        help="Threshold for the order of the auxiliary curve in bits to consider finished (Default: 30.0)")
+    parser.add_argument('-t', '--threshold', type=float, default=os.getenv("ACF_THRESHOLD", 35.0),
+                        help="Threshold for the order of the auxiliary curve in bits to consider finished (Default: 35.0)")
 
 
     parser.add_argument('-m', '--memory', type=int, default=200,
